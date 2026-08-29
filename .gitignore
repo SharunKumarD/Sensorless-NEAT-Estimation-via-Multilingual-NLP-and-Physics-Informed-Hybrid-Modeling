@@ -1,0 +1,15 @@
+# Environment Variables
+.env
+backend/.env
+
+# Node & React Native / Expo
+node_modules/
+.expo/
+
+# Python / Backend
+__pycache__/
+*.pyc
+
+# Logs & System
+*.log
+.system_generated/
