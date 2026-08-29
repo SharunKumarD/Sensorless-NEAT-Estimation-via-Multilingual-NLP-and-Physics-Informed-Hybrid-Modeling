@@ -33,12 +33,18 @@ export default function DashboardScreen() {
     });
   }
 
+  if (shapData.datasets && shapData.datasets[0] && shapData.datasets[0].data) {
+    shapData.datasets[0].data = shapData.datasets[0].data.map((val: number) => {
+      return (val > 0 && val <= 1) ? Math.round(val * 100) : Math.round(val);
+    });
+  }
+
   // 3. Circadian Forecast curve extraction with fallback
-  const fatigueData = dashboardData.circadian_forecast_curve ?? {
-    labels: ['10am', '12pm', '2pm', '4pm', '6pm', '8pm'],
+  const fatigueData = {
+    labels: ['Now', '+1h', '+2h', '+3h', '+4h'],
     datasets: [
       {
-        data: [20, 35, 30, 60, 85, 95], // Fallback Fatigue level
+        data: dashboardData.fatigue_curve ?? [20, 35, 60, 85, 95], // Fallback Fatigue level
       }
     ],
     legend: ['Predicted Fatigue Crash']
@@ -84,6 +90,9 @@ export default function DashboardScreen() {
             height={220}
             yAxisLabel=""
             yAxisSuffix="%"
+            fromZero={true}
+            segments={4}
+            formatYLabel={(y) => Math.round(Number(y)).toString()}
             chartConfig={chartConfig}
             verticalLabelRotation={30}
             style={styles.chartStyle}

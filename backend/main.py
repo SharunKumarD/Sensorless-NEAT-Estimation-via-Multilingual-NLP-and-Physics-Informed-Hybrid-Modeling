@@ -3,7 +3,8 @@ from pydantic import BaseModel
 import shutil
 import os
 import json
-from typing import List
+from typing import List, Optional
+import requests
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -14,10 +15,23 @@ from google.genai import types
 from services.audio_service import transcribe_and_analyze_audio
 from services.nlp_service import extract_entities
 from services.weather_service import get_weather_data
-from services.explainability_service import generate_shap_explainability, forecast_circadian_fatigue
-from models.fusion_model import nmfn_pipeline, predict_neat
+import torch
+import numpy as np
+from ml_engine import NeuroMetabolicFusionNetwork, get_shap_values
 
 app = FastAPI(title="Context Fusion Hub - NEAT Tracker")
+
+# Initialize the PyTorch Fusion model
+fusion_model = NeuroMetabolicFusionNetwork(tabular_dim=4, seq_input_dim=3, hidden_dim=16)
+try:
+    fusion_model.load_state_dict(torch.load('fusion_model.pth', weights_only=True))
+except Exception as e:
+    print(f"Warning: Failed to load model weights: {e}")
+fusion_model.eval()
+
+# Dummy background tabular for SHAP initialization
+np.random.seed(42)
+fusion_X_train = torch.tensor(np.random.uniform(10, 100, (1000, 4)), dtype=torch.float32)
 
 # Initialize Gemini Client (uses GEMINI_API_KEY environment variable)
 try:
@@ -39,6 +53,8 @@ class NeatContextPayload(BaseModel):
     current_fatigue_level: float = 30.0
     intensity: str = 'Normal'
     transcript: str = ''
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 class LLMMetricsOutput(BaseModel):
     duration_mins: int
@@ -97,6 +113,43 @@ Transcript: "{transcript}"
         )
 
 
+def get_live_weather(lat: Optional[float] = None, lon: Optional[float] = None):
+    # Default thermal baseline for Arcot
+    default_temp = 30.0
+    default_humidity = 60.0
+    
+    if lat is None or lon is None:
+        return default_temp, default_humidity
+        
+    api_key = os.getenv('OPENWEATHER_API_KEY')
+    if not api_key:
+        return default_temp, default_humidity
+        
+    url = f"http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        temp = data.get('main', {}).get('temp', default_temp)
+        humidity = data.get('main', {}).get('humidity', default_humidity)
+        return float(temp), float(humidity)
+    except Exception as e:
+        print(f"Weather API failed: {e}")
+        return default_temp, default_humidity
+
+import math
+
+def calculate_fatigue_curve(calories_burned: float):
+    curve = []
+    base = 20.0
+    # The more you burn, the steeper the fatigue climbs over 4 hours
+    steepness = 0.5 + (calories_burned / 400.0) 
+    for hour in range(5):
+        # Exponential climb towards 100% fatigue
+        fatigue = base + (80.0 * (1.0 - math.exp(-steepness * (hour / 2.0))))
+        curve.append(min(100, int(round(fatigue))))
+    return curve
+
 @app.post("/calculate_neat")
 async def calculate_neat(payload: NeatContextPayload):
     """
@@ -126,26 +179,47 @@ async def calculate_neat(payload: NeatContextPayload):
     features_dict['met_value'] = dynamic_met
     features_dict['duration_mins'] = float(llm_metrics.duration_mins)
     
-    # 2. Run the Neuro-Metabolic Fusion Network
-    prediction_result = predict_neat(features_dict)
-    calories_burned = prediction_result.get("predicted_calories", 0.0)
+    # 2. Integrate Live GPS Meteorological Data
+    lat = features_dict.get('latitude')
+    lon = features_dict.get('longitude')
+    live_temp, live_humidity = get_live_weather(lat, lon)
+    features_dict['temperature'] = live_temp
+    features_dict['humidity'] = live_humidity
     
-    # 3. Explainable AI (SHAP)
-    tabular_features = nmfn_pipeline._preprocess_tabular(features_dict)
-    feature_names = ["Weight", "MET (Pacing)", "Temperature", "Humidity"]
+    # 3. Run the PyTorch Neuro-Metabolic Fusion Network
+    tabular_tensor = torch.tensor([[features_dict['weight_kg'], features_dict['met_value'], features_dict['temperature'], features_dict['humidity']]], dtype=torch.float32)
+    seq_tensor = torch.rand((1, 5, 3), dtype=torch.float32) # Dummy historical RNN sequence
     
-    shap_graph_data = generate_shap_explainability(
-        xgb_model=nmfn_pipeline.xgb_model,
-        features_array=tabular_features,
-        feature_names=feature_names
+    with torch.no_grad():
+        prediction_tensor = fusion_model(tabular_tensor, seq_tensor)
+        calories_rate = prediction_tensor.item()
+        
+    # Scale calories by the actual activity duration (model output is per hour)
+    calories_burned = calories_rate * (features_dict['duration_mins'] / 60.0)
+    
+    # 4. Explainable AI (SHAP)
+    dynamic_shap_array = get_shap_values(
+        weight=features_dict['weight_kg'],
+        met=features_dict['met_value'],
+        temp=features_dict['temperature'],
+        humidity=features_dict['humidity'],
+        model=fusion_model,
+        X_train=fusion_X_train
     )
     
-    # 4. Circadian Fatigue Forecaster
-    circadian_forecast_curve = forecast_circadian_fatigue(
-        base_fatigue_level=payload.current_fatigue_level,
-        hours=4,
-        resolution_mins=60
-    )
+    feature_names = ["Weight", "MET", "Temp", "Humid"] # Shortened for dashboard
+    
+    shap_graph_data = {
+        "labels": feature_names,
+        "datasets": [
+            {
+                "data": dynamic_shap_array
+            }
+        ]
+    }
+    
+    # 5. Circadian Fatigue Forecaster
+    fatigue_curve = calculate_fatigue_curve(calories_burned)
     
     return {
         "status": "success",
@@ -154,8 +228,10 @@ async def calculate_neat(payload: NeatContextPayload):
             "dynamic_met_used": round(dynamic_met, 2),
             "detected_activity": llm_metrics.detected_activity,
             "parsed_duration_mins": llm_metrics.duration_mins,
+            "temperature": live_temp,
+            "humidity": live_humidity,
             "shap_graph_data": shap_graph_data,
-            "circadian_forecast_curve": circadian_forecast_curve
+            "fatigue_curve": fatigue_curve
         }
     }
 
@@ -165,7 +241,9 @@ from fastapi import Form
 async def process_audio(
     file: UploadFile = File(...),
     weight: float = Form(70.0),
-    intensity: str = Form("Normal")
+    intensity: str = Form("Normal"),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None)
 ):
     """
     Multilingual Acoustic Stream (Multimodal LLM Integration)
@@ -225,35 +303,52 @@ Output ONLY a raw, structured JSON object: {{"duration_mins": int, "base_met": f
             
         dynamic_met = llm_metrics["base_met"] * intensity_mult
         
+        # Integrate Live GPS Meteorological Data
+        live_temp, live_humidity = get_live_weather(latitude, longitude)
+        
         # Build features dict for NMFN
         features_dict = {
             "weight_kg": weight,
             "met_value": dynamic_met,
-            "temperature": 24.0,
-            "humidity": 60.0,
+            "temperature": live_temp,
+            "humidity": live_humidity,
             "duration_mins": float(llm_metrics["duration_mins"]),
             "acoustic_biomarkers": [[0.1, 1500, 0.05]],
             "current_fatigue_level": 40.0
         }
         
-        # Run NMFN
-        prediction_result = predict_neat(features_dict)
-        calories_burned = prediction_result.get("predicted_calories", 0.0)
+        # Run PyTorch NMFN
+        tabular_tensor = torch.tensor([[features_dict['weight_kg'], features_dict['met_value'], features_dict['temperature'], features_dict['humidity']]], dtype=torch.float32)
+        seq_tensor = torch.rand((1, 5, 3), dtype=torch.float32) # Dummy historical RNN sequence
         
-        tabular_features = nmfn_pipeline._preprocess_tabular(features_dict)
-        feature_names = ["Weight", "MET (Pacing)", "Temperature", "Humidity"]
+        with torch.no_grad():
+            prediction_tensor = fusion_model(tabular_tensor, seq_tensor)
+            calories_rate = prediction_tensor.item()
+            
+        # Scale calories by the actual activity duration (model output is per hour)
+        calories_burned = calories_rate * (features_dict['duration_mins'] / 60.0)
         
-        shap_graph_data = generate_shap_explainability(
-            xgb_model=nmfn_pipeline.xgb_model,
-            features_array=tabular_features,
-            feature_names=feature_names
+        dynamic_shap_array = get_shap_values(
+            weight=features_dict['weight_kg'],
+            met=features_dict['met_value'],
+            temp=features_dict['temperature'],
+            humidity=features_dict['humidity'],
+            model=fusion_model,
+            X_train=fusion_X_train
         )
         
-        circadian_forecast_curve = forecast_circadian_fatigue(
-            base_fatigue_level=features_dict["current_fatigue_level"],
-            hours=4,
-            resolution_mins=60
-        )
+        feature_names = ["Weight", "MET", "Temp", "Humid"] # Shortened for dashboard
+        
+        shap_graph_data = {
+            "labels": feature_names,
+            "datasets": [
+                {
+                    "data": dynamic_shap_array
+                }
+            ]
+        }
+        
+        fatigue_curve = calculate_fatigue_curve(calories_burned)
             
         return {
             "status": "success",
@@ -263,8 +358,10 @@ Output ONLY a raw, structured JSON object: {{"duration_mins": int, "base_met": f
                 "detected_activity": llm_metrics["detected_activity"],
                 "calories_burned": round(calories_burned, 1),
                 "dynamic_met_used": round(dynamic_met, 2),
+                "temperature": live_temp,
+                "humidity": live_humidity,
                 "shap_graph_data": shap_graph_data,
-                "circadian_forecast_curve": circadian_forecast_curve
+                "fatigue_curve": fatigue_curve
             }
         }
     except Exception as e:

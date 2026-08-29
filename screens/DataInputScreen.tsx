@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, KeyboardAvoidingView, Platform, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Audio } from 'expo-av';
+import * as Location from 'expo-location';
 
 const API_BASE_URL = 'http://192.168.1.6:8000';
 
@@ -14,9 +15,30 @@ export default function DataInputScreen() {
   const [inputText, setInputText] = useState('');
   const [weight, setWeight] = useState('69');
   const [intensity, setIntensity] = useState('Normal'); 
+  const [location, setLocation] = useState<{lat: number, lon: number} | null>(null);
   const navigation = useNavigation<any>();
 
   const isAnyProcessing = isTextProcessing || isAudioProcessing;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.warn('Permission to access location was denied');
+          return;
+        }
+
+        let currentLocation = await Location.getCurrentPositionAsync({});
+        setLocation({
+          lat: currentLocation.coords.latitude,
+          lon: currentLocation.coords.longitude
+        });
+      } catch (e) {
+        console.warn('Error fetching location', e);
+      }
+    })();
+  }, []);
 
   const handleRecordPress = async () => {
     try {
@@ -42,6 +64,10 @@ export default function DataInputScreen() {
           } as any);
           formData.append('weight', weight.toString());
           formData.append('intensity', intensity);
+          if (location) {
+            formData.append('latitude', location.lat.toString());
+            formData.append('longitude', location.lon.toString());
+          }
           
           try {
             const response = await fetch(`${API_BASE_URL}/process-audio`, {
@@ -131,7 +157,9 @@ export default function DataInputScreen() {
         acoustic_biomarkers: [[0.1, 1500, 0.05]],
         current_fatigue_level: 40.0,
         intensity: intensity,
-        transcript: inputText
+        transcript: inputText,
+        latitude: location?.lat,
+        longitude: location?.lon
       };
 
       const response = await fetch(`${API_BASE_URL}/calculate_neat`, {
