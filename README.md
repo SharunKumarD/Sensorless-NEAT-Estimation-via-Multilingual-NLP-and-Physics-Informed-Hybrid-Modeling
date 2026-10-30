@@ -14,6 +14,7 @@ An end-to-end ambient intelligence and biomedical computing platform designed to
 ## Table of Contents
 
 - [Overview](#overview)
+- [Project Team](#project-team)
 - [Problem Statement](#problem-statement)
 - [Project Objectives](#project-objectives)
 - [Proposed Solution](#proposed-solution)
@@ -45,6 +46,36 @@ An end-to-end ambient intelligence and biomedical computing platform designed to
 Non-Exercise Activity Thermogenesis (NEAT) represents the energy expended for everything we do that is not sleeping, eating, or sports-like exercise — ranging from walking to work, stair climbing, pacing during phone calls, typing, fidgeting, and domestic chores. While NEAT accounts for the most variable and adaptable component of total daily energy expenditure (TDEE), its continuous tracking has historically necessitated intrusive wearable sensors (e.g., accelerometers, heart-rate monitors, continuous metabolic carts).
 
 This repository presents a **sensorless, multilingual, physics-grounded alternative**: users report daily routine events via spontaneous voice logs or natural text in multiple regional dialects. The platform transcribes speech, extracts respiratory and vocal biomarkers, deduces exact physical intensity through LLM-driven semantic Compendium of Physical Activities parsing, captures live ambient environmental variables (temperature and humidity), and infers total caloric expenditure and circadian fatigue curves through a custom multi-branch neural network.
+
+---
+
+## Project Team
+
+<div align="center">
+
+<h3>School of Computer Science and Engineering</h3>
+<p><strong>Vellore Institute of Technology (VIT), Vellore</strong></p>
+
+<table align="center" width="80%">
+  <thead>
+    <tr>
+      <th align="center" width="50%">Team Member</th>
+      <th align="center" width="50%">Registration Number</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td align="center"><strong>Sharun Kumar D</strong></td>
+      <td align="center"><code>23MID0131</code></td>
+    </tr>
+    <tr>
+      <td align="center"><strong>Kishore Kannan G</strong></td>
+      <td align="center"><code>23MID0414</code></td>
+    </tr>
+  </tbody>
+</table>
+
+</div>
 
 ---
 
@@ -265,6 +296,13 @@ sequenceDiagram
 ├── package-lock.json           # Exact dependency lockfile
 ├── tsconfig.json               # TypeScript compiler configuration
 │
+├── assets/                     # Application visual assets and media
+│   └── screenshots/            # UI interface walkthrough screenshots
+│       ├── tracker-input.png   # NEAT Tracker Input Screen
+│       ├── analytics-dashboard.png # Predictive Analytics Dashboard
+│       ├── profile-calibration.png # Biomechanical Profile Calibration
+│       └── history-timeline.png    # Historical Session Timeline
+│
 ├── backend/                    # FastAPI and PyTorch backend
 │   ├── .env.example            # Environment template for API keys
 │   ├── database.py             # SQLAlchemy models (User, WorkoutHistory) and SQLite setup
@@ -465,11 +503,32 @@ Retrieves chronologically sorted historical activity sessions for the specified 
 
 ## Screenshots & Visuals
 
-| Tracker Input Screen | Predictive Analytics Dashboard | Biomechanical Profile Calibration | Historical Session Timeline |
-|:---:|:---:|:---:|:---:|
-| ![Tracker Screenshot Placeholder](https://via.placeholder.com/300x600/007BFF/FFFFFF?text=NEAT+Voice+Input+Screen) | ![Dashboard Screenshot Placeholder](https://via.placeholder.com/300x600/007BFF/FFFFFF?text=SHAP+Fatigue+Dashboard) | ![Profile Screenshot Placeholder](https://via.placeholder.com/300x600/007BFF/FFFFFF?text=Biomechanical+Profile) | ![History Screenshot Placeholder](https://via.placeholder.com/300x600/007BFF/FFFFFF?text=Workout+History) |
+<div align="center">
 
-*(Screenshots can be updated with captured application frames upon deployment)*
+<table align="center" width="100%">
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <strong>NEAT Tracker Input Screen</strong><br/>
+      <img src="assets/screenshots/tracker-input.png" width="320" alt="NEAT Tracker Input Screen"/>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <strong>Predictive Analytics Dashboard</strong><br/>
+      <img src="assets/screenshots/analytics-dashboard.png" width="320" alt="Predictive Analytics Dashboard"/>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%" valign="top">
+      <strong>Biomechanical Profile Calibration</strong><br/>
+      <img src="assets/screenshots/profile-calibration.png" width="320" alt="Biomechanical Profile Calibration"/>
+    </td>
+    <td align="center" width="50%" valign="top">
+      <strong>Historical Session Timeline</strong><br/>
+      <img src="assets/screenshots/history-timeline.png" width="320" alt="Historical Session Timeline"/>
+    </td>
+  </tr>
+</table>
+
+</div>
 
 ---
 
@@ -484,6 +543,7 @@ Retrieves chronologically sorted historical activity sessions for the specified 
 
 ## Author & Acknowledgments
 
-- **Author:** Sharun Kumar D
-- **GitHub:** [@SharunKumarD](https://github.com/SharunKumarD)
-- **Institution:** Vellore Institute of Technology (VIT)
+- **Project Lead:** Sharun Kumar D ([@SharunKumarD](https://github.com/SharunKumarD))
+- **Team Collaborator:** Kishore Kannan G
+- **Institution:** Vellore Institute of Technology (VIT), Vellore
+- **Department:** School of Computer Science and Engineering
