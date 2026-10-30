@@ -4,8 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.1.6:8000';
+import { API_BASE_URL } from '../config';
 
 export default function DataInputScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -56,13 +57,17 @@ export default function DataInputScreen() {
           
           const formData = new FormData();
           
-          // @ts-ignore
+          const storedWeight = await AsyncStorage.getItem('user_weight');
+          const storedUserId = await AsyncStorage.getItem('user_id') || 'guest';
+          const finalWeight = (weight && !isNaN(parseFloat(weight))) ? weight : (storedWeight ? storedWeight : '69.0');
+          
           formData.append('file', {
             uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
             name: 'recording.m4a',
             type: 'audio/m4a'
           } as any);
-          formData.append('weight', weight.toString());
+          formData.append('weight', finalWeight);
+          formData.append('user_id', storedUserId);
           formData.append('intensity', intensity);
           if (location) {
             formData.append('latitude', location.lat.toString());
@@ -146,9 +151,12 @@ export default function DataInputScreen() {
     try {
       setIsTextProcessing(true);
       const duration_mins = parseDuration(inputText);
-      const weight_kg = parseFloat(weight) || 69.0;
+      const storedWeight = await AsyncStorage.getItem('user_weight');
+      const storedUserId = await AsyncStorage.getItem('user_id') || 'guest';
+      const weight_kg = (weight && !isNaN(parseFloat(weight))) ? parseFloat(weight) : (storedWeight ? parseFloat(storedWeight) : 69.0);
       
       const payload = {
+        user_id: storedUserId,
         weight_kg: weight_kg,
         met_value: 3.5,
         temperature: 24.0,

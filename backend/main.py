@@ -21,6 +21,21 @@ from ml_engine import NeuroMetabolicFusionNetwork, get_shap_values
 
 app = FastAPI(title="Context Fusion Hub - NEAT Tracker")
 
+from database import Base, engine, SessionLocal, User, WorkoutHistory
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
+# Create SQLite tables
+Base.metadata.create_all(bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 # Initialize the PyTorch Fusion model
 fusion_model = NeuroMetabolicFusionNetwork(tabular_dim=4, seq_input_dim=3, hidden_dim=16)
 try:
@@ -44,6 +59,7 @@ class TextPayload(BaseModel):
     text: str
 
 class NeatContextPayload(BaseModel):
+    user_id: Optional[str] = "guest"
     weight_kg: float = 70.0
     met_value: float = 1.5
     temperature: float = 20.0
@@ -151,7 +167,7 @@ def calculate_fatigue_curve(calories_burned: float):
     return curve
 
 @app.post("/calculate_neat")
-async def calculate_neat(payload: NeatContextPayload):
+async def calculate_neat(payload: NeatContextPayload, db: Session = Depends(get_db)):
     """
     Stage 4: Predictive Outputs & Visualization.
     The ultimate endpoint that accepts gathered multimodal context,
@@ -194,6 +210,11 @@ async def calculate_neat(payload: NeatContextPayload):
         prediction_tensor = fusion_model(tabular_tensor, seq_tensor)
         calories_rate = prediction_tensor.item()
         
+    # Dynamic Biomechanical Baseline Cap (B_max) based on true payload.weight
+    b_max = features_dict['weight_kg'] * 25.0 # Max ~25 kcal/kg/hour
+    if calories_rate > b_max:
+        calories_rate = b_max
+        
     # Scale calories by the actual activity duration (model output is per hour)
     calories_burned = calories_rate * (features_dict['duration_mins'] / 60.0)
     
@@ -221,6 +242,19 @@ async def calculate_neat(payload: NeatContextPayload):
     # 5. Circadian Fatigue Forecaster
     fatigue_curve = calculate_fatigue_curve(calories_burned)
     
+    # Save to Database
+    workout = WorkoutHistory(
+        user_id=features_dict.get('user_id', 'guest'),
+        extracted_met=dynamic_met,
+        duration=features_dict['duration_mins'],
+        live_temp=live_temp,
+        calories_burned=calories_burned,
+        shap_array=dynamic_shap_array
+    )
+    db.add(workout)
+    db.commit()
+    db.refresh(workout)
+    
     return {
         "status": "success",
         "data": {
@@ -240,10 +274,12 @@ from fastapi import Form
 @app.post("/process-audio")
 async def process_audio(
     file: UploadFile = File(...),
+    user_id: str = Form("guest"),
     weight: float = Form(70.0),
     intensity: str = Form("Normal"),
     latitude: Optional[float] = Form(None),
-    longitude: Optional[float] = Form(None)
+    longitude: Optional[float] = Form(None),
+    db: Session = Depends(get_db)
 ):
     """
     Multilingual Acoustic Stream (Multimodal LLM Integration)
@@ -325,6 +361,11 @@ Output ONLY a raw, structured JSON object: {{"duration_mins": int, "base_met": f
             prediction_tensor = fusion_model(tabular_tensor, seq_tensor)
             calories_rate = prediction_tensor.item()
             
+        # Dynamic Biomechanical Baseline Cap (B_max) based on true weight
+        b_max = features_dict['weight_kg'] * 25.0
+        if calories_rate > b_max:
+            calories_rate = b_max
+            
         # Scale calories by the actual activity duration (model output is per hour)
         calories_burned = calories_rate * (features_dict['duration_mins'] / 60.0)
         
@@ -350,6 +391,19 @@ Output ONLY a raw, structured JSON object: {{"duration_mins": int, "base_met": f
         
         fatigue_curve = calculate_fatigue_curve(calories_burned)
             
+        # Save to Database
+        workout = WorkoutHistory(
+            user_id=user_id,
+            extracted_met=dynamic_met,
+            duration=llm_metrics["duration_mins"],
+            live_temp=live_temp,
+            calories_burned=calories_burned,
+            shap_array=dynamic_shap_array
+        )
+        db.add(workout)
+        db.commit()
+        db.refresh(workout)
+        
         return {
             "status": "success",
             "data": {
@@ -391,3 +445,29 @@ async def process_text(payload: TextPayload):
             "environmental_context": weather_data
         }
     }
+
+class UserCreate(BaseModel):
+    user_id: str
+    height: float
+    weight: float
+    age: int
+    gender: str
+
+@app.post("/users")
+async def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.user_id == user.user_id).first()
+    if db_user:
+        for key, value in user.dict().items():
+            setattr(db_user, key, value)
+    else:
+        db_user = User(**user.dict())
+        db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return {"status": "success", "user": db_user}
+
+@app.get("/history/{user_id}")
+async def get_history(user_id: str, db: Session = Depends(get_db)):
+    history = db.query(WorkoutHistory).filter(WorkoutHistory.user_id == user_id).order_by(WorkoutHistory.timestamp.desc()).all()
+    return {"status": "success", "history": history}
+
