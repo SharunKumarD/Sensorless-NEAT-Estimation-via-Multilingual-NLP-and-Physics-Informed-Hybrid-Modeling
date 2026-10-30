@@ -467,7 +467,11 @@ Retrieves chronologically sorted historical activity sessions for the specified 
 
 | Tracker Input Screen | Predictive Analytics Dashboard | Biomechanical Profile Calibration | Historical Session Timeline |
 |:---:|:---:|:---:|:---:|
-| ![Tracker Screenshot Placeholder](https://via.placeholder.com/300x600/007BFF/FFFFFF?text=NEAT+Voice+Input+Screen) | ![Dashboard Screenshot Placeholder](https://via.placeholder.com/300x600/007BFF/FFFFFF?text=SHAP+Fatigue+Dashboard) | ![Profile Screenshot Placeholder](https://via.placeholder.com/300x600/007BFF/FFFFFF?text=Biomechanical+Profile) | ![History Screenshot Placeholder](https://via.placeholder.com/300x600/007BFF/FFFFFF?text=Workout+History) |
+| <img width="720" height="1600" alt="WhatsApp Image 2026-10-28 at 15 58 33" src="https://github.com/user-attachments/assets/8d706557-3d89-4eb5-a69b-ee77ab6ee22a" />
+ | <img width="720" height="1600" alt="WhatsApp Image 2026-10-28 at 15 58 32 (1)" src="https://github.com/user-attachments/assets/9dcf80f6-01b6-493d-b546-9522efb71051" />
+| <img width="720" height="1600" alt="WhatsApp Image 2026-10-31 at 00 22 28" src="https://github.com/user-attachments/assets/1c332943-602a-4750-a751-addc4e2e9e37" />
+| <img width="720" height="1600" alt="WhatsApp Image 2026-10-28 at 15 58 32" src="https://github.com/user-attachments/assets/1428f332-fc9b-4842-8275-b3e9e5ac3ffd" />
+|
 
 *(Screenshots can be updated with captured application frames upon deployment)*
 
